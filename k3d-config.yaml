@@ -1,0 +1,17 @@
+# Config k3d (apiVersion v5) — cluster de test "sans-limite"
+# Utilisation : k3d cluster create --config k3d-config.yaml
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: sans-limite
+servers: 1
+agents: 1
+# Utilise le registre local créé séparément (voir Makefile : k3d registry create)
+registries:
+  use:
+    - k3d-sl-registry:5000
+ports:
+  # Expose l'Ingress Traefik (port 80 du loadbalancer k3s) sur localhost:8080
+  - port: 8080:80
+    nodeFilters:
+      - loadbalancer

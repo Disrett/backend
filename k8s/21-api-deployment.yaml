@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: sans-limite
+spec:
+  # 1 réplique pour le test : la messagerie Socket.io nécessiterait sinon
+  # un adaptateur Redis + sticky sessions pour fonctionner à plusieurs répliques.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      # initContainer : synchronise le schéma Prisma vers la base AVANT le démarrage.
+      # `db push` applique l'état du schema.prisma directement, sans fichiers de
+      # migration — idéal pour un environnement de test. (En production, on génère
+      # de vraies migrations et on repasse à `prisma migrate deploy`.)
+      initContainers:
+        - name: prisma-db-push
+          image: k3d-sl-registry:5000/sans-limite-api:latest
+          command: ["npx", "prisma", "db", "push", "--skip-generate"]
+          envFrom:
+            - secretRef:
+                name: api-secret
+      containers:
+        - name: api
+          image: k3d-sl-registry:5000/sans-limite-api:latest
+          ports:
+            - containerPort: 3001
+          envFrom:
+            - secretRef:
+                name: api-secret
+          readinessProbe:
+            httpGet:
+              path: /api/posts
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              memory: "512Mi"

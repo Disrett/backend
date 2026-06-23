@@ -1,0 +1,361 @@
+openapi: 3.1.0
+info:
+  title: Sans Limites — API
+  description: >
+    API du réseau social sportif Sans Limites.
+    L'authentification se fait par JWT : récupérez un `accessToken` via
+    /auth/register ou /auth/login, puis envoyez-le dans l'en-tête
+    `Authorization: Bearer <token>` sur les routes protégées.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:8080/api
+    description: Cluster k3d (Ingress Traefik)
+  - url: http://localhost:3001/api
+    description: Exécution locale (npm run start:dev)
+
+tags:
+  - name: auth
+    description: Inscription, connexion, tokens
+  - name: users
+    description: Profils et abonnements
+  - name: posts
+    description: Publications, likes, commentaires
+  - name: notifications
+    description: Notifications de l'utilisateur
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Inscription
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterInput' }
+      responses:
+        '201':
+          description: Compte créé, tokens émis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '409': { description: Email ou nom d'utilisateur déjà utilisé }
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Connexion
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+      responses:
+        '200':
+          description: Connecté, tokens émis
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { description: Identifiants invalides }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Déconnexion (invalide le refresh token)
+      responses:
+        '200':
+          description: Déconnecté
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Renouvellement des tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, refreshToken]
+              properties:
+                userId: { type: string }
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: Nouveaux tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { description: Refresh token invalide }
+
+  /users/{username}:
+    get:
+      tags: [users]
+      summary: Profil public d'un utilisateur
+      security: []
+      parameters:
+        - { name: username, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Profil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserProfile' }
+        '404': { description: Utilisateur introuvable }
+
+  /users/{id}/follow:
+    post:
+      tags: [users]
+      summary: Suivre un utilisateur
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '201': { description: Abonnement créé }
+    delete:
+      tags: [users]
+      summary: Ne plus suivre un utilisateur
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Abonnement supprimé }
+
+  /posts:
+    get:
+      tags: [posts]
+      summary: Fil d'actualité (paginé par curseur)
+      security: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+          description: id du dernier post reçu (pagination)
+      responses:
+        '200':
+          description: Liste de publications
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Post' }
+    post:
+      tags: [posts]
+      summary: Créer une publication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePostInput' }
+      responses:
+        '201':
+          description: Publication créée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+
+  /posts/{id}:
+    delete:
+      tags: [posts]
+      summary: Supprimer sa publication
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Supprimée }
+        '404': { description: Publication introuvable }
+
+  /posts/{id}/like:
+    post:
+      tags: [posts]
+      summary: Aimer une publication (idempotent)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '201': { description: Like enregistré }
+    delete:
+      tags: [posts]
+      summary: Retirer son like
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Like retiré }
+
+  /posts/{id}/comments:
+    post:
+      tags: [posts]
+      summary: Commenter une publication
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCommentInput' }
+      responses:
+        '201':
+          description: Commentaire créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+
+  /notifications:
+    get:
+      tags: [notifications]
+      summary: Notifications de l'utilisateur connecté
+      responses:
+        '200':
+          description: Liste de notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+
+  /notifications/read-all:
+    patch:
+      tags: [notifications]
+      summary: Marquer toutes les notifications comme lues
+      responses:
+        '200': { description: Notifications marquées lues }
+
+  /notifications/{id}:
+    delete:
+      tags: [notifications]
+      summary: Supprimer une notification
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Supprimée }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterInput:
+      type: object
+      required: [email, password, username, name]
+      properties:
+        email: { type: string, format: email, example: alex@sans-limite.dev }
+        password: { type: string, minLength: 8, example: motdepasse123 }
+        username: { type: string, example: alex.martin }
+        name: { type: string, example: Alexandre Martin }
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+
+    CreatePostInput:
+      type: object
+      properties:
+        title: { type: string, example: Premier run }
+        content: { type: string, example: 10 km ce matin }
+        imageUrl: { type: string, format: uri }
+        sportId: { type: string }
+
+    CreateCommentInput:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, example: Bravo ! }
+
+    AuthorPreview:
+      type: object
+      properties:
+        username: { type: string }
+        name: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+
+    Post:
+      type: object
+      properties:
+        id: { type: string }
+        authorId: { type: string }
+        title: { type: [string, 'null'] }
+        content: { type: [string, 'null'] }
+        imageUrl: { type: [string, 'null'] }
+        sportId: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        author: { $ref: '#/components/schemas/AuthorPreview' }
+        _count:
+          type: object
+          properties:
+            likes: { type: integer }
+            comments: { type: integer }
+
+    Comment:
+      type: object
+      properties:
+        id: { type: string }
+        postId: { type: string }
+        authorId: { type: string }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+        author: { $ref: '#/components/schemas/AuthorPreview' }
+
+    UserProfile:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        name: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        bio: { type: [string, 'null'] }
+        location: { type: [string, 'null'] }
+        primarySport: { type: [string, 'null'] }
+        objectives:
+          type: array
+          items: { $ref: '#/components/schemas/Objective' }
+        _count:
+          type: object
+          properties:
+            followers: { type: integer }
+            following: { type: integer }
+            posts: { type: integer }
+
+    Objective:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        progress: { type: integer, minimum: 0, maximum: 100 }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        recipientId: { type: string }
+        actorId: { type: [string, 'null'] }
+        type:
+          type: string
+          enum: [LIKE, COMMENT, FOLLOW, CHALLENGE, EVENT, GROUP, MESSAGE, SYSTEM]
+        entityId: { type: [string, 'null'] }
+        content: { type: [string, 'null'] }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        actor: { $ref: '#/components/schemas/AuthorPreview' }

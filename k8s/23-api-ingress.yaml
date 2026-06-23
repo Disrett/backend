@@ -1,0 +1,19 @@
+# Ingress Traefik (fourni par défaut avec k3d/k3s).
+# Traefik proxifie nativement les WebSockets (messagerie Socket.io) — rien à ajouter.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  namespace: sans-limite
+spec:
+  rules:
+    # Accessible via http://localhost:8080 (port mappé dans k3d-config.yaml)
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 3001

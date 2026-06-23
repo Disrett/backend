@@ -1,0 +1,401 @@
+// ============================================================================
+//  Sans Limites — Schéma de base de données (Prisma + PostgreSQL)
+// ----------------------------------------------------------------------------
+//  Réseau social sportif communautaire.
+//  Modèle dérivé du frontend Next.js (branche dev_brandon) :
+//  utilisateurs, abonnements, posts, likes, commentaires, sports/catégories,
+//  groupes, événements, messagerie temps réel, notifications, défis & objectifs.
+//
+//  Conventions :
+//   - Identifiants en cuid() (URL-safe, non séquentiels).
+//   - Les images ne sont PAS stockées en base : on ne garde que des URLs
+//     pointant vers un stockage objet (S3 / Cloudflare R2 / Supabase Storage).
+//   - onDelete: Cascade sur les tables de liaison pour garder la base propre.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+//  ENUMS
+// ===========================================================================
+
+enum GroupVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum GroupRole {
+  ORGANIZER // Organisateur / Fondateur
+  CO_ORGANIZER // Co-organisateur
+  MEMBER // Membre
+}
+
+enum EventRole {
+  ORGANIZER // Organisateur
+  VOLUNTEER // Bénévole
+  PARTICIPANT // Participant
+}
+
+enum NotificationType {
+  LIKE // a aimé votre publication
+  COMMENT // a commenté votre publication
+  FOLLOW // a commencé à vous suivre
+  CHALLENGE // progression / récompense sur un défi
+  EVENT // rappel / invitation à un événement
+  GROUP // activité dans un groupe
+  MESSAGE // nouveau message
+  SYSTEM // notification système
+}
+
+// ===========================================================================
+//  UTILISATEURS & ABONNEMENTS
+// ===========================================================================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  // Hash du mot de passe (argon2/bcrypt). JAMAIS le mot de passe en clair.
+  passwordHash String
+  username     String   @unique // ex: "alexandre.martin" (sans le @)
+  name         String // Nom affiché : "Alexandre Martin"
+  avatarUrl    String?
+  bio          String?
+  location     String?
+  primarySport String? // sport principal affiché sur le profil
+
+  // Token de rafraîchissement haché (rotation des refresh tokens)
+  hashedRefreshToken String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Contenu produit
+  posts    Post[]
+  comments Comment[]
+  likes    Like[]
+
+  // Graphe social (auto-relation many-to-many)
+  following Follow[] @relation("Follower") // ceux que CET utilisateur suit
+  followers Follow[] @relation("Following") // ceux qui suivent CET utilisateur
+
+  // Sports suivis (many-to-many via table de liaison)
+  sports UserSport[]
+
+  // Groupes & événements
+  groupMemberships  GroupMember[]
+  organizedEvents   Event[]            @relation("EventOrganizer")
+  eventParticipations EventParticipant[]
+
+  // Messagerie
+  conversations ConversationParticipant[]
+  sentMessages  Message[]
+
+  // Notifications reçues / émises
+  notifications      Notification[] @relation("NotificationRecipient")
+  triggeredNotifications Notification[] @relation("NotificationActor")
+
+  // Gamification
+  objectives     Objective[]
+  userChallenges UserChallenge[]
+
+  @@index([username])
+  @@map("users")
+}
+
+/// Relation d'abonnement orientée (follower -> following)
+model Follow {
+  id          String   @id @default(cuid())
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followerId  String
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  followingId String
+  createdAt   DateTime @default(now())
+
+  // Un utilisateur ne peut suivre une même personne qu'une seule fois
+  @@unique([followerId, followingId])
+  @@index([followingId])
+  @@map("follows")
+}
+
+// ===========================================================================
+//  SPORTS / CATÉGORIES
+// ===========================================================================
+
+model Sport {
+  id          String  @id @default(cuid())
+  slug        String  @unique // "football", "basketball", "running"...
+  name        String
+  tagline     String?
+  description String?
+  imageUrl    String?
+  accent      String? // classe de dégradé Tailwind, ex "from-[#0a3b8f] to-[#ff9b54]"
+
+  users  UserSport[]
+  posts  Post[]
+  events Event[]
+  groups Group[]
+
+  @@map("sports")
+}
+
+/// Table de liaison User <-> Sport (sports suivis par l'utilisateur)
+model UserSport {
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  sport     Sport    @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  sportId   String
+  createdAt DateTime @default(now())
+
+  @@id([userId, sportId])
+  @@map("user_sports")
+}
+
+// ===========================================================================
+//  PUBLICATIONS, LIKES, COMMENTAIRES
+// ===========================================================================
+
+model Post {
+  id        String   @id @default(cuid())
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId  String
+  title     String?
+  content   String?
+  imageUrl  String?
+  sport     Sport?   @relation(fields: [sportId], references: [id])
+  sportId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  likes    Like[]
+  comments Comment[]
+
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("posts")
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  createdAt DateTime @default(now())
+
+  // Un utilisateur ne peut liker un post qu'une fois
+  @@unique([userId, postId])
+  @@index([postId])
+  @@map("likes")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+  @@map("comments")
+}
+
+// ===========================================================================
+//  GROUPES
+// ===========================================================================
+
+model Group {
+  id              String          @id @default(cuid())
+  slug            String          @unique
+  name            String
+  description     String?
+  longDescription String?
+  coverImageUrl   String?
+  sport           Sport?          @relation(fields: [sportId], references: [id])
+  sportId         String?
+  category        String? // "Préparation compétition"...
+  city            String?
+  district        String?
+  level           String? // "Tous niveaux", "Intermédiaire"...
+  frequency       String? // "3x/semaine"...
+  maxMembers      Int?
+  visibility      GroupVisibility @default(PUBLIC)
+  createdAt       DateTime        @default(now())
+
+  members GroupMember[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId  String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  role     GroupRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("group_members")
+}
+
+// ===========================================================================
+//  ÉVÉNEMENTS
+// ===========================================================================
+
+model Event {
+  id              String   @id @default(cuid())
+  title           String
+  category        String? // "Course", "Tournoi"...
+  description     String?
+  startsAt        DateTime // date + heure de l'événement
+  location        String? // "Paris, Île-de-France"
+  exactLocation   String? // "Départ : Avenue des Champs-Élysées"
+  level           String?
+  maxParticipants Int?
+  coverImageUrl   String?
+  sport           Sport?   @relation(fields: [sportId], references: [id])
+  sportId         String?
+  organizer       User     @relation("EventOrganizer", fields: [organizerId], references: [id])
+  organizerId     String
+  createdAt       DateTime @default(now())
+
+  participants EventParticipant[]
+
+  @@index([startsAt])
+  @@map("events")
+}
+
+model EventParticipant {
+  event    Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId  String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  role     EventRole @default(PARTICIPANT)
+  joinedAt DateTime  @default(now())
+
+  @@id([eventId, userId])
+  @@index([userId])
+  @@map("event_participants")
+}
+
+// ===========================================================================
+//  MESSAGERIE (temps réel via WebSocket Gateway)
+// ===========================================================================
+
+/// Une conversation peut être 1:1 ou de groupe (isGroup = true)
+model Conversation {
+  id        String   @id @default(cuid())
+  isGroup   Boolean  @default(false)
+  title     String? // pour les conversations de groupe
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  joinedAt       DateTime     @default(now())
+
+  @@id([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  senderId       String
+  content        String
+  imageUrl       String? // pièce jointe éventuelle
+  // Accusé de lecture : null = non lu (la simple coche), date = lu (double coche)
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// ===========================================================================
+//  NOTIFICATIONS
+// ===========================================================================
+
+model Notification {
+  id        String           @id @default(cuid())
+  // Destinataire
+  recipient User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  recipientId String
+  // Acteur à l'origine de la notif (qui a liké, suivi, commenté...)
+  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorId   String?
+  type      NotificationType
+  // Référence libre vers l'objet concerné (postId, eventId, groupId...)
+  entityId  String?
+  content   String? // texte pré-calculé optionnel
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([recipientId, read])
+  @@map("notifications")
+}
+
+// ===========================================================================
+//  GAMIFICATION : OBJECTIFS PERSONNELS & DÉFIS COMMUNAUTAIRES
+// ===========================================================================
+
+/// Objectif personnel défini par l'utilisateur ("Courir 500 km cette année")
+model Objective {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  label     String
+  progress  Int      @default(0) // pourcentage 0-100
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("objectives")
+}
+
+/// Défi communautaire (catalogue partagé : "Juin 100 km", "Gran Fondo"...)
+model Challenge {
+  id          String   @id @default(cuid())
+  name        String
+  icon        String? // emoji ou nom d'icône
+  description String?
+  createdAt   DateTime @default(now())
+
+  participants UserChallenge[]
+
+  @@map("challenges")
+}
+
+/// Participation d'un utilisateur à un défi, avec sa progression
+model UserChallenge {
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  challengeId String
+  progress    Int       @default(0) // pourcentage 0-100
+  joinedAt    DateTime  @default(now())
+
+  @@id([userId, challengeId])
+  @@map("user_challenges")
+}
