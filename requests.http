@@ -25,8 +25,8 @@ Content-Type: application/json
   "email": "alexx@sans-limite.dev",
   "password": "motdepasse123x" 
 }
-### Capture le token de la réponse précédente
-@token = {{login.response.body.accessToken}}
+### Capture le token de la réponse précédente   A DECOMMENTER POUR LOGIN
+#@token = {{login.response.body.accessToken}}
 ### 3. Créer une publication
 # @name createPost
 POST {{base}}/posts
