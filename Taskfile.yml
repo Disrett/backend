@@ -1,0 +1,137 @@
+# ============================================================================
+#  Sans Limites — déploiement sur k3d (environnement de test)
+#  Remplace le Makefile.  Doc : https://taskfile.dev/docs/guide
+#
+#  Enchaînement type :  task registry → task up → task build → task push → task deploy
+#  (ou simplement `task redeploy` pour le cycle de dev)
+#
+#  Mécanismes utilisés :
+#   - deps          : ordonnancement entre tâches (build avant push, etc.)
+#   - sources       : empreinte du code -> ne reconstruit que si ça a changé
+#   - status        : contrôle programmatique pour les artefacts distants
+#                     (image Docker, cluster, registre) -> évite le travail inutile
+#   - preconditions : garde-fous qui stoppent la tâche avec un message explicite
+# ============================================================================
+version: '3'
+
+vars:
+  CLUSTER: sans-limite
+  REGISTRY: sl-registry # k3d le préfixe en "k3d-sl-registry"
+  REGISTRY_PORT: '5000'
+  IMAGE: sans-limite-api
+  TAG: latest
+  # Pour POUSSER depuis l'hôte : localhost. Pour TIRER dans le cluster : k3d-sl-registry.
+  PUSH_IMAGE: 'localhost:{{.REGISTRY_PORT}}/{{.IMAGE}}:{{.TAG}}'
+
+tasks:
+  # --- Liste des tâches quand on lance `task` sans argument -----------------
+  default:
+    desc: Liste les tâches disponibles
+    cmds:
+      - task --list
+    silent: true
+
+  # --- Infrastructure k3d ---------------------------------------------------
+  registry:
+    desc: Crée le registre local k3d (idempotent)
+    preconditions:
+      - sh: command -v k3d >/dev/null 2>&1
+        msg: "k3d n'est pas installé — voir https://k3d.io"
+      - sh: docker info >/dev/null 2>&1
+        msg: "Le démon Docker n'est pas démarré."
+    # status : si le registre existe déjà, la tâche est considérée à jour -> skip
+    status:
+      - k3d registry list 2>/dev/null | grep -q 'k3d-{{.REGISTRY}}'
+    cmds:
+      - k3d registry create {{.REGISTRY}} --port {{.REGISTRY_PORT}}
+
+  up:
+    desc: Crée le cluster k3d (idempotent)
+    deps: [registry] # le registre doit exister avant le cluster
+    preconditions:
+      - sh: command -v k3d >/dev/null 2>&1
+        msg: "k3d n'est pas installé — voir https://k3d.io"
+      - sh: test -f k3d-config.yaml
+        msg: 'k3d-config.yaml introuvable à la racine du projet.'
+    status:
+      - k3d cluster list 2>/dev/null | grep -q '{{.CLUSTER}}'
+    cmds:
+      - k3d cluster create --config k3d-config.yaml
+
+  # --- Image Docker ---------------------------------------------------------
+  build:
+    desc: Construit l'image Docker de l'API (skippé si rien n'a changé et image présente)
+    preconditions:
+      - sh: docker info >/dev/null 2>&1
+        msg: "Le démon Docker n'est pas démarré."
+    # sources : empreinte du code. Si aucun de ces fichiers n'a changé...
+    sources:
+      - Dockerfile
+      - .dockerignore
+      - package.json
+      - package-lock.json
+      - tsconfig.json
+      - nest-cli.json
+      - prisma/**/*
+      - src/**/*
+    # ...ET que l'image existe encore localement (status), la tâche est skippée.
+    # Combiner sources + status est la méthode recommandée pour les artefacts
+    # qui ne sont pas un simple fichier sur disque (cf. doc Taskfile).
+    status:
+      - docker image inspect {{.PUSH_IMAGE}} >/dev/null 2>&1
+    cmds:
+      - docker build -t {{.PUSH_IMAGE}} .
+
+  push:
+    desc: Pousse l'image dans le registre local k3d
+    deps: [build] # garantit une image à jour avant de pousser
+    preconditions:
+      - sh: k3d registry list 2>/dev/null | grep -q 'k3d-{{.REGISTRY}}'
+        msg: "Registre absent. Lancez d'abord : task registry"
+    cmds:
+      - docker push {{.PUSH_IMAGE}}
+
+  # --- Déploiement ----------------------------------------------------------
+  deploy:
+    desc: Applique les manifestes k8s et attend le rollout
+    preconditions:
+      - sh: command -v kubectl >/dev/null 2>&1
+        msg: "kubectl n'est pas installé."
+      - sh: kubectl cluster-info >/dev/null 2>&1
+        msg: 'Aucun cluster joignable. Lancez : task up'
+      - sh: test -d k8s
+        msg: 'Dossier k8s/ introuvable.'
+    # Caché sur l'empreinte des manifestes : `kubectl apply` n'est relancé
+    # que si un YAML de k8s/ a changé.
+    sources:
+      - k8s/**/*.yaml
+    cmds:
+      - kubectl apply -f k8s/
+      - kubectl -n {{.CLUSTER}} rollout status deployment/api
+
+  logs:
+    desc: Affiche les logs de l'API en direct
+    preconditions:
+      - sh: kubectl cluster-info >/dev/null 2>&1
+        msg: 'Aucun cluster joignable. Lancez : task up'
+    cmds:
+      - kubectl -n {{.CLUSTER}} logs -f deployment/api
+
+  redeploy:
+    desc: Reconstruit, repousse et redémarre le déploiement (cycle de dev)
+    # `task: push` déclenche `build` via sa dépendance (tous deux respectant le
+    # cache). Forcer un rebuild complet : `task build --force`.
+    cmds:
+      - task: push
+      - kubectl -n {{.CLUSTER}} rollout restart deployment/api
+      - kubectl -n {{.CLUSTER}} rollout status deployment/api
+
+  # --- Nettoyage ------------------------------------------------------------
+  down:
+    desc: Supprime le cluster k3d (le registre survit)
+    prompt: Supprimer le cluster {{.CLUSTER}} ?
+    preconditions:
+      - sh: k3d cluster list 2>/dev/null | grep -q '{{.CLUSTER}}'
+        msg: "Le cluster {{.CLUSTER}} n'existe pas."
+    cmds:
+      - k3d cluster delete {{.CLUSTER}}

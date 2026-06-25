@@ -8,7 +8,7 @@ Content-Type: application/json
 
 {
   "email": "alex@sans-limite.dev",
-  "password": "motdepasse123",
+  "password": "motdepasse123x",
   "username": "alex.martin",
   "name": "Alexandre Martin"
 }
@@ -21,16 +21,20 @@ Content-Type: application/json
 POST {{base}}/auth/login
 Content-Type: application/json
 
-{ "email": "alexxxx@sans-limite.dev", "password": "motdepasse123" }
-
+{ 
+  "email": "alexx@sans-limite.dev",
+  "password": "motdepasse123x" 
+}
+### Capture le token de la réponse précédente
+@token = {{login.response.body.accessToken}}
 ### 3. Créer une publication
 # @name createPost
 POST {{base}}/posts
-Authorization: Authorization: Bearer {{token}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{ "title": "Premierr run", "content": "10 km ce matin" }
-
+{ "title": "premier run", "content": "10 km ce matin" }
+### Capture le token de la réponse précédente
 @postId = {{createPost.response.body.id}}
 
 ### 4. Fil d'actualité (public)

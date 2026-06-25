@@ -67,10 +67,10 @@ npm run start:dev      # http://localhost:3001/api
 **OUI CA**
 ```bash
 nix develop
-make registry
-make up
-make build && make push
-make deploy
+task registry
+task up
+task build && task push
+task deploy
 curl http://localhost:8080/api/posts  # ca doit rien renvoyer
 ./smoke-test.sh # test le backend
 ```

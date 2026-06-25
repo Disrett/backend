@@ -29,6 +29,7 @@
             kubernetes-helm # optionnel, si vous ajoutez des charts plus tard
 	    curl
 	    jq
+	    go-task
           ];
 
           # Câble Prisma sur les engines fournis par Nix (cf. piège ci-dessus)
