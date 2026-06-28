@@ -1,7 +1,11 @@
+# General
+backend/node_modules
 dist/
 .env
+CHANGE.md
 *.log
 /.task
+
 # Nix / direnv
 .direnv/
 result

@@ -50,123 +50,97 @@ bandeau « Mode démonstration » prévient l'utilisateur.
 
 ---
 
-## 3. Étapes réalisées (dans l'ordre)
+## 3. Comment lancer le projet complet
 
-### Étape 1 — Configuration d'environnement (front)
-Création de `frontend/.env.local` et `frontend/.env.example` :
-```
-NEXT_PUBLIC_API_URL=http://localhost:3001/api
-NEXT_PUBLIC_WS_URL=http://localhost:3001
-```
-
-### Étape 2 — Stockage des jetons (`app/lib/auth.js`)
-Fonctions `saveTokens`, `getAccessToken`, `getRefreshToken`, `getUser`,
-`isAuthenticated`, `clearAuth`. Les jetons renvoyés par le back
-(`{ accessToken, refreshToken }`) sont conservés dans le `localStorage`.
-
-### Étape 3 — Client API (`app/lib/api.js`)
-Un point d'entrée unique vers le backend :
-- injecte automatiquement `Authorization: Bearer <token>` sur les routes protégées ;
-- gère les erreurs réseau et les erreurs de validation NestJS (messages en tableau) ;
-- expose : `register, login, logout, refresh, getFeed, createPost, deletePost,
-  likePost, unlikePost, addComment, getProfile, follow, unfollow,
-  getNotifications, markAllNotificationsRead, deleteNotification`.
-
-### Étape 4 — Mappers (`app/lib/mappers.js`)
-- `mapPost` / `mapPosts` : post backend → format `PostCard`.
-- `mapNotification` / `mapNotifications` : notif backend → format `NotificationItem`
-  (l'enum backend `LIKE/COMMENT/FOLLOW/CHALLENGE/EVENT/GROUP/MESSAGE/SYSTEM` est
-  rabattu sur les types connus de l'UI).
-- `timeAgo` : date ISO → « Il y a 2h ».
-
-### Étape 5 — Connexion (`app/components/login-page.js`)
-Le `handleSubmit` appelle `api.login()`, stocke les jetons, puis redirige vers `/`.
-Ajout d'un état de chargement et d'un bandeau d'erreur.
-
-### Étape 6 — Inscription (`app/components/signup-page.js`)
-Le formulaire riche est **mappé** vers le contrat minimal du backend
-(`{ email, password, username, name }`). Un `username` valide est généré
-automatiquement à partir du nom/email (règles : 3–30 caractères, `[a-zA-Z0-9._-]`).
-Validation côté client alignée sur le backend (mot de passe ≥ 8 caractères).
-
-### Étape 7 — Fil d'actualité (`app/page.js`)
-- `useEffect` au montage → `api.getFeed()` → posts réels (sinon repli démo).
-- `toggleLike` → `api.likePost` / `api.unlikePost` (affichage optimiste).
-- `handleAddComment` → `api.addComment`.
-- Bandeau « Mode démonstration » si le backend ne répond pas.
-
-### Étape 8 — Notifications (`app/notifications/page.js`)
-- Chargement réel via `api.getNotifications()` si connecté.
-- `markAllRead` → `api.markAllNotificationsRead`.
-- `deleteNotif` → `api.deleteNotification`.
-- Durcissement : repli sur un type par défaut si un type inattendu arrive (évite un crash).
-
-### Étape 9 — Déconnexion (`app/components/header.js`)
-Ajout d'un bouton de déconnexion (présent sur toutes les pages) : appelle
-`api.logout()` puis purge le localStorage et redirige vers `/login`.
-
-### Étape 10 — Backend prêt à l'emploi
-- Création de `backend/.env` (DATABASE_URL alignée sur la commande Docker du README,
-  secrets JWT de dev, `PORT=3001`, `FRONTEND_URL`).
-- Création du **seed manquant** `backend/prisma/seed.ts` : comptes de test +
-  publications + likes + commentaires + abonnements + notifications.
-
----
-
-## 4. Fichiers impactés
-
-**Nouveaux fichiers (front)**
-- `frontend/.env.local`
-- `frontend/.env.example`
-- `frontend/app/lib/auth.js`
-- `frontend/app/lib/api.js`
-- `frontend/app/lib/mappers.js`
-
-**Fichiers modifiés (front)**
-- `frontend/app/components/login-page.js`
-- `frontend/app/components/signup-page.js`
-- `frontend/app/components/header.js`
-- `frontend/app/page.js`
-- `frontend/app/notifications/page.js`
-
-**Nouveaux fichiers (back)**
-- `backend/.env`
-- `backend/prisma/seed.ts`
-
-> Le backend lui-même n'a **pas** été modifié (CORS et routes étaient déjà
-> compatibles). Seuls des fichiers de configuration/seed ont été ajoutés.
-
----
-
-## 5. Comment lancer le projet complet
+> **Important — le backend DOIT être lancé via Nix.** L'outillage (node, task,
+> k3d, kubectl, prisma…) est fourni par le *dev shell* Nix (Lix), et les
+> dépendances npm du backend sont installées **dans l'image Docker** lors du
+> `task build` — il ne faut donc **PAS** faire de `npm install` côté backend.
+> Le backend tourne dans un cluster **k3d** (k3s dans Docker) et est exposé sur
+> **http://localhost:8080/api** (et non 3001).
 
 ### Prérequis
-- Node.js ≥ 18, npm ≥ 9
-- PostgreSQL (le plus simple : Docker)
+- **Docker** (démon démarré) — k3d crée un k3s *dans* Docker.
+- **Nix / Lix** — pour `nix develop` (fournit node 22, go-task, k3d, kubectl, prisma + engines). Voir `backend/LIX.md`.
+- **Node.js ≥ 18 + npm** — uniquement pour le **frontend**.
 
-### 1) Base de données
-```bash
-docker run --name sl-postgres \
-  -e POSTGRES_PASSWORD=password -e POSTGRES_DB=sans_limite \
-  -p 5432:5432 -d postgres:16
-```
+### 3.1 Backend — via Nix + Task + k3d (terminal 1)
 
-### 2) Backend (terminal 1)
 ```bash
 cd backend
-npm install
-npm run prisma:migrate      # crée les tables
-npm run prisma:generate
-npm run db:seed             # données de démo + comptes de test
-npm run start:dev           # API sur http://localhost:3001/api
+
+nix develop
+#  Ouvre le shell de développement reproductible (Lix lit flake.nix / flake.lock).
+#  Met à disposition l'outillage épinglé : node 22, go-task, k3d, kubectl, prisma + engines.
+#  ⚠️ AUCUN `npm install` à lancer ici : les deps backend sont installées dans l'image (cf. task build).
+
+task registry
+#  Crée le registre d'images Docker local utilisé par k3d (k3d-sl-registry:5000).
+#  Idempotent : si le registre existe déjà, la tâche est ignorée (mécanisme `status` du Taskfile).
+
+task up
+#  Crée le cluster k3d « sans-limite » (1 serveur + 1 agent, Traefik inclus).
+#  Mappe le port 8080 de l'hôte sur l'Ingress du cluster (cf. k3d-config.yaml). Idempotent.
+
+task build
+#  Construit l'image Docker de l'API (Dockerfile multi-étapes).
+#  👉 C'EST ICI que tout s'installe et se compile : `npm ci` + `npx prisma generate` + `npm run build`.
+#     D'où l'inutilité d'un `npm install` sur l'hôte. (Re-build seulement si le code a changé : mécanisme `sources`.)
+
+task push
+#  Pousse l'image construite dans le registre local k3d (dépend de `build`, qui est donc garanti à jour).
+
+task deploy
+#  Applique les manifestes k8s (dossier k8s/) : namespace, PostgreSQL, secrets, API, Service, Ingress.
+#  Un initContainer exécute `npx prisma db push` (synchronise le schéma vers la base) AVANT le démarrage de l'API,
+#  puis la commande attend la fin du rollout. → API prête sur http://localhost:8080/api.
 ```
 
-### 3) Frontend (terminal 2)
+Vérification rapide :
+```bash
+curl http://localhost:8080/api/posts        # => [] tant que la base n'est pas seedée
+```
+
+**Données de démo + comptes de test** (le seed n'est **pas** automatique). On le lance
+**dans le pod**, qui contient déjà `node_modules` (donc toujours sans `npm install` sur l'hôte) :
+```bash
+kubectl -n sans-limite exec deploy/api -- npm run db:seed
+#  Exécute `ts-node prisma/seed.ts` à l'intérieur du conteneur de l'API :
+#  crée les comptes de test + publications + likes + commentaires + notifications.
+```
+
+**Cycle de développement** (après une modif du code backend — ex. le correctif CORS de `main.ts`) :
+```bash
+task redeploy        # rebuild + push + redémarrage du déploiement (applique le nouveau code dans le cluster)
+task logs            # suit en direct les logs de l'API
+```
+
+> 🔸 **CORS en mode déployé.** L'image tourne avec `NODE_ENV=production`, donc la
+> tolérance « réseau local » du CORS (ajoutée dans `main.ts`) est **désactivée** :
+> accédez au front via `http://localhost:3000`, ou ajustez `FRONTEND_URL` dans
+> `k8s/20-api-secret.yaml` puis `task redeploy`.
+
+### 3.2 Frontend — via npm (terminal 2)
+
 ```bash
 cd frontend
+
 npm install
-npm run dev                 # interface sur http://localhost:3000
+#  Côté FRONTEND, `npm install` EST nécessaire (contrairement au backend géré par Nix/Docker).
+
+npm run dev
+#  Démarre Next.js en mode développement → interface sur http://localhost:3000.
 ```
+
+> ⚠️ **Faire pointer le front vers le bon port.** Avec le backend Nix/Task/k3d,
+> l'API est sur **8080**. Mettez donc dans `frontend/.env.local` :
+> ```
+> NEXT_PUBLIC_API_URL=http://localhost:8080/api
+> NEXT_PUBLIC_WS_URL=http://localhost:8080
+> ```
+> puis **relancez** `npm run dev` (Next.js ne lit `NEXT_PUBLIC_*` qu'au démarrage).
+> Avec ce port, le smoke-test (section 6.2.A) tourne d'ailleurs **sans** le
+> préfixe `BASE_URL` (sa valeur par défaut est déjà 8080).
 
 ### Comptes de test (créés par le seed)
 Mot de passe commun : **`password123`**
@@ -174,11 +148,25 @@ Mot de passe commun : **`password123`**
 - `thomas@sanslimites.fr`
 - `sophie@sanslimites.fr`
 
+> 🔹 **Note honnête sur le port.** Pendant tout notre débogage, nous avons utilisé
+> le chemin « tout local » `npm run start:dev` (port **3001**), plus simple pour
+> itérer. Il reste possible *dans le dev shell Nix* (node y est fourni), mais il
+> exige une base PostgreSQL séparée **et** des `node_modules` sur l'hôte — ce que
+> votre équipe évite. Le chemin **Nix + Task + k3d ci-dessus (port 8080) est le
+> chemin de référence du projet** ; c'est celui à privilégier.
+
+> 🧪 **Statut de validation de cette section.** Le flux Nix/Task/k3d n'a **pas pu
+> être exécuté de bout en bout** dans l'environnement de test (ni Nix, ni démon
+> Docker, ni accès au cache binaire Nix / au binaire `task`). Il a été **reconstitué
+> à partir des fichiers du projet** (`flake.nix`, `Taskfile.yml`, `Dockerfile`,
+> `k8s/`, `DEPLOY.md`), et tous les manifestes YAML ont été validés. À exécuter
+> sur un poste disposant de Nix + Docker pour confirmation finale.
+
 ---
 
-## 6. Validation effectuée
+## 4. Validation effectuée
 
-### 6.1 Validation côté intégration (réalisée lors de la mise en place)
+### 4.1 Validation côté intégration (réalisée lors de la mise en place)
 
 | Vérification | Résultat |
 |---|---|
@@ -195,7 +183,7 @@ Mot de passe commun : **`password123`**
 > une machine normale disposant d'Internet, le build des polices fonctionne sans
 > changement.
 
-### 6.2 Vérifier que tout fonctionne (après avoir suivi la section 5)
+### 4.2 Vérifier que tout fonctionne (après avoir suivi la section 5)
 
 Une fois la base, le backend (port **3001**) et le frontend (port **3000**)
 démarrés, voici comment confirmer, étape par étape, que la liaison est bien
@@ -243,7 +231,7 @@ curl -X POST http://localhost:3001/api/auth/login \
 - **Requêtes 200 vers `:3001` dans l'onglet Réseau** → le frontend parle bien au
   backend.
 
-### 6.3 Dépannage (si quelque chose ne marche pas)
+### 4.3 Dépannage (si quelque chose ne marche pas)
 
 | Symptôme | Cause probable / solution |
 |---|---|
@@ -256,7 +244,7 @@ curl -X POST http://localhost:3001/api/auth/login \
 
 ---
 
-## 7. Problèmes connus & limites (à traiter ensuite)
+## 5. Problèmes connus & limites (à traiter ensuite)
 
 Ces points ne **cassent pas** le projet, mais sont des limites assumées que je
 signale honnêtement :
@@ -301,7 +289,7 @@ signale honnêtement :
 
 ---
 
-## 8. Récapitulatif
+## 6. Récapitulatif
 
 ✅ Authentification (connexion + inscription) reliée au backend.
 ✅ Fil d'actualité, likes et commentaires reliés (avec repli démo).
