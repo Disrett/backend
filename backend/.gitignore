@@ -1,7 +1,8 @@
+node_modules/
 dist/
 .env
 *.log
-/.task
+
 # Nix / direnv
 .direnv/
 result

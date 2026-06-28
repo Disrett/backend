@@ -1,0 +1,28 @@
+# CI : installe Lix puis valide le flake et le build de l'API.
+name: ci
+
+on:
+  push:
+    branches: [main, dev_brandon]
+  pull_request:
+
+jobs:
+  flake:
+    name: Flake + build (Lix)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installe Lix (flakes activés par défaut).
+      # Épinglez le SHA de l'action ; vérifiez la dernière révision sur
+      # https://git.lix.systems/lix-project/lix-installer
+      - name: Install Lix
+        uses: samueldr/lix-gha-installer-action@8dc19fbd6451fa106a68ecb2dafeeeb90dff3a29
+
+      # Le devShell évalue-t-il correctement sous Lix ?
+      - name: Vérifier le flake
+        run: nix flake check
+
+      # Build de l'API dans le devShell (Node + npm fournis par le flake).
+      - name: Build de l'API
+        run: nix develop --command bash -c "npm ci && npx prisma generate && npm run build"
