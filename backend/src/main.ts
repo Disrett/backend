@@ -5,9 +5,33 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // CORS : autorise uniquement le front Next.js (cookies/headers d'auth)
+  // CORS : autorise le front Next.js (cookies/headers d'auth).
+  // - En production : uniquement les origines listées dans FRONTEND_URL
+  //   (séparées par des virgules), ex. "https://sanslimites.fr,https://www.sanslimites.fr".
+  // - En développement : on autorise EN PLUS localhost, 127.0.0.1 et les IP de
+  //   réseau local (192.168.x, 10.x, 172.16–31.x) sur n'importe quel port, afin
+  //   que le site fonctionne qu'on l'ouvre via http://localhost:3000 OU via
+  //   l'URL « Network » que Next.js affiche (ex. http://192.168.1.21:3000).
+  const allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  const isProduction = process.env.NODE_ENV === 'production';
+  const lanOriginRegex =
+    /^https?:\/\/(localhost|127\.0\.0\.1|(?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))(?:\.\d{1,3}){2,3})(?::\d+)?$/;
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Pas d'origine = appel serveur-à-serveur, curl, ou même origine → autorisé.
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // En dev, on tolère localhost et les IP de réseau privé.
+      if (!isProduction && lanOriginRegex.test(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origine non autorisée par CORS : ${origin}`), false);
+    },
     credentials: true,
   });
 
