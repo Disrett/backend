@@ -9,3 +9,6 @@ CHANGE.md
 # Nix / direnv
 .direnv/
 result
+
+
+frontend/.next
