@@ -11,7 +11,7 @@ import PostModal from './components/postmodal';
 import Footer from './components/Footer/Footer';
 import { api } from './lib/api';
 import { mapPosts } from './lib/mappers';
-import { isAuthenticated } from './lib/auth';
+import { useSession } from 'next-auth/react';
 
 export default function Home() {
   // États
@@ -21,7 +21,8 @@ export default function Home() {
   const [newComment, setNewComment] = useState('');
   // demoMode = true tant que le backend n'a pas répondu (données de démo affichées)
   const [demoMode, setDemoMode] = useState(true);
-
+  const { status } = useSession();
+  const userConnected = status === 'authenticated';
   // Données des posts
   const [posts, setPosts] = useState([
     {
@@ -184,7 +185,7 @@ export default function Home() {
     }
 
     // Synchronisation backend (uniquement sur des posts réels + utilisateur connecté).
-    if (!demoMode && isAuthenticated()) {
+    if (!demoMode && userConnected) {
       const action = willLike ? api.likePost(postId) : api.unlikePost(postId);
       action.catch(() => {
         /* Échec silencieux : on garde l'affichage optimiste pour ne pas gêner l'UX. */
@@ -238,7 +239,7 @@ export default function Home() {
       setNewComment('');
 
       // Persiste le commentaire côté backend si connecté + post réel.
-      if (!demoMode && isAuthenticated()) {
+      if (!demoMode && userConnected) {
         api.addComment(postId, newCommentObj.text).catch(() => {
           /* Échec silencieux : le commentaire reste affiché localement. */
         });

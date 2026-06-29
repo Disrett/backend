@@ -22,7 +22,7 @@ POST {{base}}/auth/login
 Content-Type: application/json
 
 { 
-  "email": "alexx@sans-limite.dev",
+  "email": "alex@sans-limite.dev",
   "password": "motdepasse123x" 
 }
 ### Capture le token de la réponse précédente   A DECOMMENTER POUR LOGIN
