@@ -1,0 +1,25 @@
+GABARIT DE LICENCE — À COMPLÉTER PAR L'ÉQUIPE
+
+Aucune licence n'a encore été choisie pour ce projet. Tant que ce fichier n'est
+pas remplacé par un texte de licence valide, le code est par défaut « tous droits
+réservés » : personne ne peut légalement le réutiliser, le modifier ou le
+redistribuer sans autorisation explicite.
+
+Le choix d'une licence est une décision juridique qui appartient aux titulaires
+des droits. Pour décider, voir https://choosealicense.com.
+
+Pistes courantes selon l'intention :
+
+  - Projet ouvert, réutilisation large et simple ......... MIT
+  - Ouvert mais préservant les correctifs communautaires . Apache-2.0 (clause brevets)
+  - Copyleft fort (toute redistribution reste libre) ..... GPL-3.0
+  - Projet privé / propriétaire .......................... mention « Propriétaire »
+                                                           + conditions internes
+
+Une fois le choix arrêté :
+  1. Remplace l'intégralité de ce fichier par le texte officiel de la licence.
+  2. Ajoute l'année et le nom du ou des titulaires des droits.
+  3. Mentionne la licence dans le README et le champ "license" du package.json.
+
+Copyright (c) 2026 Sans Limites. Tous droits réservés (par défaut, jusqu'au
+choix d'une licence).
