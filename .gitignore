@@ -9,4 +9,7 @@ CHANGE.md
 # Nix / direnv
 .direnv/
 result
+
 frontend/node_modules
+frontend/.next
+

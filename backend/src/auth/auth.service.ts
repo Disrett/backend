@@ -96,6 +96,6 @@ export class AuthService {
       data: { hashedRefreshToken: await argon2.hash(refreshToken) },
     });
 
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, user: { id: userId, username } };
   }
 }

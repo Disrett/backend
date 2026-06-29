@@ -4,8 +4,7 @@ import { useState, useMemo } from 'react';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api, ApiError } from '../lib/api';
-import { saveTokens, saveUser } from '../lib/auth';
+import { loginWithCredentials } from '../lib/auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,22 +32,26 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
+
     try {
-      // POST /api/auth/login → { accessToken, refreshToken }
-      const tokens = await api.login({
-        email: formData.email,
-        password: formData.password,
-      });
-      saveTokens(tokens);
-      saveUser({ email: formData.email });
-      // Connexion réussie → redirection vers le fil d'actualité
+      /**
+       * loginWithCredentials() appelle signIn('credentials') de NextAuth.
+       * NextAuth fait l'appel au backend CÔTÉ SERVEUR (dans auth.js → authorize()),
+       * puis stocke les tokens dans un cookie httpOnly chiffré.
+       * Le JavaScript côté client ne voit jamais les tokens.
+       */
+      const result = await loginWithCredentials(formData.email, formData.password);
+
+      if (!result.ok) {
+        // NextAuth retourne 'CredentialsSignin' pour les identifiants invalides
+        setError('Email ou mot de passe incorrect.');
+        return;
+      }
+
       router.push('/');
-    } catch (err) {
-      const message =
-        err instanceof ApiError
-          ? err.message
-          : 'Une erreur est survenue. Réessayez.';
-      setError(message);
+      router.refresh(); // Invalide le cache Next.js pour mettre à jour la session
+    } catch {
+      setError('Une erreur est survenue. Réessayez.');
     } finally {
       setLoading(false);
     }
@@ -112,7 +115,7 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Message d'erreur renvoyé par le backend */}
+          {/* Message d'erreur */}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 text-center">
               {error}
@@ -128,6 +131,8 @@ export default function LoginPage() {
               placeholder="Email"
               value={formData.email}
               onChange={handleChange}
+              required
+              autoComplete="email"
               className="w-full pl-12 pr-4 py-4 bg-transparent border-b-2 border-gray-200 focus:border-orange-400 outline-none transition-colors text-gray-700 placeholder-gray-400"
             />
           </div>
@@ -141,11 +146,14 @@ export default function LoginPage() {
               placeholder="Mot de passe"
               value={formData.password}
               onChange={handleChange}
+              required
+              autoComplete="current-password"
               className="w-full pl-12 pr-12 py-4 bg-transparent border-b-2 border-gray-200 focus:border-orange-400 outline-none transition-colors text-gray-700 placeholder-gray-400"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
               className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
             >
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}

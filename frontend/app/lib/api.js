@@ -3,24 +3,22 @@
 // =============================================================================
 //  Client API — point d'entrée unique vers le backend NestJS
 // -----------------------------------------------------------------------------
-//  Toutes les requêtes HTTP vers le backend passent par ici. Avantages :
-//   - un seul endroit où gérer l'URL de base, les en-têtes et les erreurs ;
-//   - le jeton d'accès (JWT) est injecté automatiquement sur les routes
-//     protégées ;
-//   - les composants/pages restent lisibles (ils appellent api.login(), etc.).
+//  Après migration NextAuth, les tokens JWT backend ne transitent plus par
+//  localStorage. Le token d'accès est récupéré depuis la session NextAuth
+//  via getSession() — il est stocké dans le JWT NextAuth chiffré (cookie httpOnly).
 //
-//  La forme des réponses correspond au contrat décrit dans le README backend
-//  (section « Routes déjà disponibles »).
+//  Pour les composants React, il est préférable d'utiliser useSession() et de
+//  passer le token manuellement, ou de centraliser les appels dans des
+//  Server Actions / Route Handlers Next.js (recommandé en production).
 // =============================================================================
 
-import { getAccessToken } from './auth';
+import { getSession } from 'next-auth/react';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
 /**
  * Erreur enrichie levée par le client API.
- * `status` = code HTTP, `data` = corps JSON renvoyé par le backend (s'il existe).
  */
 export class ApiError extends Error {
   constructor(message, status, data) {
@@ -33,16 +31,24 @@ export class ApiError extends Error {
 
 /**
  * Wrapper bas niveau autour de fetch.
- * @param {string} path  ex: '/auth/login'
- * @param {object} options { method, body, auth }
+ *
+ * Si auth=true, on récupère le token depuis la session NextAuth (côté client).
+ * Le token n'est JAMAIS dans localStorage : il vient du JWT NextAuth déchiffré
+ * côté client par next-auth/react, qui le lit depuis le cookie de session.
+ *
+ * ⚠️ Pour les Server Components / Server Actions, utilisez auth() de NextAuth
+ *    et passez le token depuis le callback jwt() — voir auth.js.
  */
 async function request(path, { method = 'GET', body, auth = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
 
-  // Routes protégées : on ajoute le Bearer token s'il existe.
   if (auth) {
-    const token = getAccessToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    // getSession() lit le cookie de session NextAuth et retourne le JWT décodé.
+    // Le token d'accès backend y est stocké (voir callback jwt() dans auth.js).
+    const session = await getSession();
+    if (session?.accessToken) {
+      headers['Authorization'] = `Bearer ${session.accessToken}`;
+    }
   }
 
   let res;
@@ -52,8 +58,7 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
       headers,
       body: body ? JSON.stringify(body) : undefined,
     });
-  } catch (networkError) {
-    // Backend injoignable (non démarré, mauvais port, CORS bloqué...).
+  } catch {
     throw new ApiError(
       'Impossible de joindre le serveur. Vérifiez que le backend est démarré.',
       0,
@@ -61,7 +66,6 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
     );
   }
 
-  // Réponses sans corps (204, etc.)
   let data = null;
   const text = await res.text();
   if (text) {
@@ -76,7 +80,6 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
     const message =
       (data && (data.message || data.error)) ||
       `Erreur ${res.status}`;
-    // NestJS renvoie parfois message sous forme de tableau (validation).
     const finalMessage = Array.isArray(message) ? message.join(' · ') : message;
     throw new ApiError(finalMessage, res.status, data);
   }
@@ -88,18 +91,14 @@ async function request(path, { method = 'GET', body, auth = false } = {}) {
 //  AUTH
 // ---------------------------------------------------------------------------
 export const api = {
-  // POST /api/auth/register  { email, password, username, name }
-  register: (payload) =>
-    request('/auth/register', { method: 'POST', body: payload }),
+  // L'inscription passe directement par fetch dans signup-page.js.
+  // La connexion/déconnexion passent par NextAuth (signIn / signOut).
 
-  // POST /api/auth/login  { email, password }
-  login: (payload) =>
-    request('/auth/login', { method: 'POST', body: payload }),
-
-  // POST /api/auth/logout  (Bearer)
+  // POST /api/auth/logout  (Bearer) — appelé par NextAuth signOut si besoin
   logout: () => request('/auth/logout', { method: 'POST', auth: true }),
 
   // POST /api/auth/refresh  { userId, refreshToken }
+  // Géré automatiquement par NextAuth (callback jwt → refreshAccessToken)
   refresh: (userId, refreshToken) =>
     request('/auth/refresh', {
       method: 'POST',
@@ -109,27 +108,21 @@ export const api = {
   // -------------------------------------------------------------------------
   //  POSTS / FEED
   // -------------------------------------------------------------------------
-  // GET /api/posts?cursor=...
   getFeed: (cursor) =>
     request(`/posts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
 
-  // POST /api/posts  (Bearer)  { title?, content?, imageUrl?, sportId? }
   createPost: (payload) =>
     request('/posts', { method: 'POST', body: payload, auth: true }),
 
-  // DELETE /api/posts/:id  (Bearer)
   deletePost: (id) =>
     request(`/posts/${id}`, { method: 'DELETE', auth: true }),
 
-  // POST /api/posts/:id/like  (Bearer)
   likePost: (id) =>
     request(`/posts/${id}/like`, { method: 'POST', auth: true }),
 
-  // DELETE /api/posts/:id/like  (Bearer)
   unlikePost: (id) =>
     request(`/posts/${id}/like`, { method: 'DELETE', auth: true }),
 
-  // POST /api/posts/:id/comments  (Bearer)  { content }
   addComment: (id, content) =>
     request(`/posts/${id}/comments`, {
       method: 'POST',
@@ -140,28 +133,22 @@ export const api = {
   // -------------------------------------------------------------------------
   //  USERS
   // -------------------------------------------------------------------------
-  // GET /api/users/:username
   getProfile: (username) => request(`/users/${username}`),
 
-  // POST /api/users/:id/follow  (Bearer)
   follow: (id) =>
     request(`/users/${id}/follow`, { method: 'POST', auth: true }),
 
-  // DELETE /api/users/:id/follow  (Bearer)
   unfollow: (id) =>
     request(`/users/${id}/follow`, { method: 'DELETE', auth: true }),
 
   // -------------------------------------------------------------------------
   //  NOTIFICATIONS
   // -------------------------------------------------------------------------
-  // GET /api/notifications  (Bearer)
   getNotifications: () => request('/notifications', { auth: true }),
 
-  // PATCH /api/notifications/read-all  (Bearer)
   markAllNotificationsRead: () =>
     request('/notifications/read-all', { method: 'PATCH', auth: true }),
 
-  // DELETE /api/notifications/:id  (Bearer)
   deleteNotification: (id) =>
     request(`/notifications/${id}`, { method: 'DELETE', auth: true }),
 };
