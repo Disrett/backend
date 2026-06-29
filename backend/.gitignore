@@ -6,3 +6,4 @@ dist/
 # Nix / direnv
 .direnv/
 result
+.task
