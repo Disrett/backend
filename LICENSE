@@ -1,25 +1,21 @@
-GABARIT DE LICENCE — À COMPLÉTER PAR L'ÉQUIPE
+MIT License
 
-Aucune licence n'a encore été choisie pour ce projet. Tant que ce fichier n'est
-pas remplacé par un texte de licence valide, le code est par défaut « tous droits
-réservés » : personne ne peut légalement le réutiliser, le modifier ou le
-redistribuer sans autorisation explicite.
+Copyright (c) [year] [fullname]
 
-Le choix d'une licence est une décision juridique qui appartient aux titulaires
-des droits. Pour décider, voir https://choosealicense.com.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Pistes courantes selon l'intention :
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-  - Projet ouvert, réutilisation large et simple ......... MIT
-  - Ouvert mais préservant les correctifs communautaires . Apache-2.0 (clause brevets)
-  - Copyleft fort (toute redistribution reste libre) ..... GPL-3.0
-  - Projet privé / propriétaire .......................... mention « Propriétaire »
-                                                           + conditions internes
-
-Une fois le choix arrêté :
-  1. Remplace l'intégralité de ce fichier par le texte officiel de la licence.
-  2. Ajoute l'année et le nom du ou des titulaires des droits.
-  3. Mentionne la licence dans le README et le champ "license" du package.json.
-
-Copyright (c) 2026 Sans Limites. Tous droits réservés (par défaut, jusqu'au
-choix d'une licence).
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
