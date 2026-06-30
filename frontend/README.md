@@ -4,8 +4,6 @@
 
 SANSLimites est une application web qui permet aux athlètes de partager leurs performances, de relever des défis quotidiens, de découvrir des athlètes inspirants et de rester connectés avec une communauté sportive motivante.
 
-> 🔗 **Projet full-stack.** Le frontend (Next.js) est désormais **relié à une API backend NestJS** (authentification, fil d'actualité, likes, commentaires, notifications). Si le backend n'est pas démarré, l'application bascule automatiquement en **mode démonstration** (données d'exemple). Voir [`INTEGRATION.md`](./INTEGRATION.md) pour le détail de la liaison front ↔ back, et [`CHANGE.md`](./CHANGE.md) pour le journal des changements.
-
 ---
 
 ## Table des matières
@@ -19,7 +17,6 @@ SANSLimites est une application web qui permet aux athlètes de partager leurs p
 - [Composants](#composants)
 - [Données](#données)
 - [Charte graphique](#charte-graphique)
-- [Documentation](#documentation)
 - [Contributeurs](#contributeurs)
 
 ---
@@ -42,65 +39,30 @@ L'interface s'inspire des grandes plateformes sociales avec une sidebar de navig
 | [Lucide React](https://lucide.dev/) | 0.562.0 | Icônes |
 | [Google Fonts](https://fonts.google.com/) | — | Typographie (Geist, Montserrat) |
 
-**Côté backend** (dépôt/dossier séparé, voir [`INTEGRATION.md`](./INTEGRATION.md)) :
-
-| Technologie | Rôle |
-|---|---|
-| [NestJS](https://nestjs.com/) | API REST + WebSocket (auth JWT, posts, notifications, messagerie) |
-| [Prisma](https://www.prisma.io/) | ORM (schéma, migrations, accès base) |
-| [PostgreSQL](https://www.postgresql.org/) | Base de données |
-| [Nix / Lix](https://nixos.org/) + [Task](https://taskfile.dev/) + [k3d](https://k3d.io/) | Environnement reproductible & déploiement local (k3s dans Docker) |
-
 ---
 
 ## Prérequis
 
-**Frontend :**
 - **Node.js** v18 ou supérieur
 - **npm** v9 ou supérieur
-
-**Backend** (si vous voulez l'app reliée et pas seulement en mode démo) :
-- **Docker** (démon démarré) — k3d crée un k3s dans Docker
-- **Nix / Lix** — fournit l'outillage (node, task, k3d, kubectl, prisma)
-
-> Sans backend, le frontend fonctionne quand même : il s'affiche en **mode démonstration** avec des données d'exemple.
 
 ---
 
 ## Installation et lancement
 
-Le projet a deux parties. Pour l'application **reliée** (recommandé), lancez le backend puis le frontend. Pour une simple découverte de l'interface, le frontend seul suffit (mode démo).
-
-### 1. Backend (API) — via Nix + Task + k3d
-
-L'API tourne dans un cluster k3d et est exposée sur **http://localhost:8080/api**. Procédure résumée (chaque commande est commentée dans [`INTEGRATION.md`](./INTEGRATION.md)) :
-
 ```bash
-cd backend
-nix develop                         # shell outillé (node, task, k3d, kubectl, prisma)
-task registry && task up            # registre d'images + cluster k3d
-task build && task push             # construit/pousse l'image (npm ci + prisma generate se font ICI)
-task deploy                          # déploie PostgreSQL + API (schéma synchronisé au démarrage)
-kubectl -n sans-limite exec deploy/api -- npm run db:seed   # données + comptes de test
-```
+# 1. Cloner le dépôt
+git clone <url-du-repo>
+cd sans-limites
 
-> ⚠️ **Pas de `npm install` côté backend** : les dépendances sont installées dans l'image Docker. Après toute modification du code backend, reconstruisez l'image (`task redeploy`), sinon le cluster continue de tourner l'ancienne version.
-
-### 2. Frontend (interface)
-
-```bash
-cd frontend
-
-# Pointer le front vers l'API (port 8080 en mode k3d) :
-echo 'NEXT_PUBLIC_API_URL=http://localhost:8080/api' > .env.local
-
+# 2. Installer les dépendances
 npm install
+
+# 3. Lancer le serveur de développement
 npm run dev
 ```
 
-L'application est accessible sur [http://localhost:3000](http://localhost:3000). Ouvrez-la via **localhost** (et non l'URL « Network » en `192.168.x.x`) pour respecter le CORS du backend.
-
-> 💡 Le port de l'API dépend du mode de lancement du backend : **8080** via Nix/Task/k3d, **3001** si vous lancez le backend en local avec `npm run start:dev`. Adaptez `NEXT_PUBLIC_API_URL` en conséquence, puis relancez `npm run dev`.
+L'application est accessible sur [http://localhost:3000](http://localhost:3000).
 
 ### Autres commandes disponibles
 
@@ -173,10 +135,7 @@ sans-limites/
 │   │   └── sportsData.js             # Données des sports (catégories)
 │   │
 │   └── lib/
-│       ├── api.js                    # Client API (toutes les requêtes vers le backend)
-│       ├── auth.js                   # Stockage des jetons JWT (localStorage)
-│       ├── mappers.js                # Conversion des données backend → format des composants
-│       └── mockData.js               # Données fictives (repli en mode démo)
+│       └── mockData.js               # Données fictives (profil, publications)
 │
 ├── public/                           # Assets statiques
 │   └── background.png                # Image de fond (pages contact, login, signup)
@@ -185,8 +144,7 @@ sans-limites/
 ├── postcss.config.mjs                # Configuration PostCSS (Tailwind)
 ├── jsconfig.json                     # Alias de chemins (@/)
 ├── eslint.config.mjs                 # Configuration ESLint
-├── package.json                      # Dépendances et scripts
-└── .env.local                        # Variables d'env front (NEXT_PUBLIC_API_URL) — non versionné
+└── package.json                      # Dépendances et scripts
 ```
 
 ---
@@ -348,8 +306,6 @@ Pied de page avec trois colonnes : Legal, Contactez-nous, Suivez-nous. Dégradé
 
 ## Données
 
-Depuis l'intégration, plusieurs pages (accueil, notifications, connexion/inscription) récupèrent leurs données **en direct depuis l'API backend** via `app/lib/api.js`, avec conversion au bon format par `app/lib/mappers.js`. Les fichiers ci-dessous restent utilisés pour les parties non encore branchées et comme **repli en mode démonstration** (backend éteint).
-
 ### `app/data/sportsData.js`
 Liste complète des sports disponibles sur la plateforme (nom, slug, image, tagline, nombre d'abonnés, membres actifs). Utilisé par les pages `/categories` et `/categories/[slug]`.
 
@@ -370,20 +326,6 @@ Données fictives pour la page profil : `mockUser` (informations utilisateur, ob
 | Typographie | **Montserrat Bold** |
 
 Le dégradé caractéristique de la navbar et du footer passe du bleu `#0047AB` à l'orange `#FFA75F`.
-
----
-
-## Documentation
-
-Documents complémentaires à la racine du projet :
-
-| Fichier | Contenu |
-|---|---|
-| [`INTEGRATION.md`](./INTEGRATION.md) | Architecture de la liaison front ↔ back, procédure de lancement (Nix + Task + k3d), vérification de bout en bout, dépannage et limites connues. |
-| [`CHANGE.md`](./CHANGE.md) | Journal chronologique de tous les changements (fusion initiale + correctifs). |
-| [`RUNBOOK-base-de-donnees.md`](./RUNBOOK-base-de-donnees.md) | Accès à PostgreSQL (psql / Prisma Studio), opérations `INSERT` / `UPDATE` / `DELETE`, et emplacement des logs. |
-
-**Repères de ports** : frontend sur **3000**, API sur **8080** (mode k3d) ou **3001** (mode `start:dev` local), PostgreSQL sur **5432** (interne au cluster).
 
 ---
 

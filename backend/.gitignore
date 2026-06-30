@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.log
+
+# Nix / direnv
+.direnv/
+result
+.task

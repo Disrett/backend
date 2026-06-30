@@ -1,8 +1,15 @@
-node_modules/
+# General
+backend/node_modules
 dist/
 .env
+CHANGE.md
 *.log
 /.task
+
 # Nix / direnv
 .direnv/
 result
+
+frontend/node_modules
+frontend/.next
+
