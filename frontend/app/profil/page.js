@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from '@/app/components/sidebar';
 import MobileMenu from '@/app/components/mobilemenu';
 import Header from '@/app/components/header';
@@ -8,12 +8,37 @@ import ProfileHeader from '@/app/components/ProfileHeader';
 import PublicationsGrid from '@/app/components/PublicationsGrid';
 import ObjectivesAndChallenges from '@/app/components/ObjectivesAndChallenges';
 import { mockUser, mockPublications } from '@/app/lib/mockData';
+import { useSession } from 'next-auth/react';
+import { api } from '@/app/lib/api';
 
 
 export default function ProfilPage() {
   const [showMenu, setShowMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  const [user, setUser] = useState(mockUser);
+  const [counts, setCounts] = useState({ followers: '1.2k', following: '340' });
+
+  // Profil réel de l'utilisateur connecté (en-tête + compteurs) via NextAuth.
+  // Les blocs sans route backend (activités, objectifs, défis, trophées) restent en démo.
+  const { data: session } = useSession();
+  useEffect(() => {
+    const username = session?.user?.username;
+    if (!username) return; // non connecté → on garde la démo
+    api.getProfile(username)
+      .then((p) => {
+        setUser({
+          ...mockUser,
+          name: p.name,
+          username: p.username,
+          bio: p.bio || mockUser.bio,
+          location: p.location || '',
+          avatar: p.avatarUrl || mockUser.avatar,
+        });
+        setCounts({ followers: p._count.followers, following: p._count.following });
+      })
+      .catch(() => {}); // en cas d'échec, la démo reste affichée
+  }, [session]);
 
   const tabs = [
     { key: 'overview',   label: "Vue d'ensemble" },
@@ -27,8 +52,8 @@ export default function ProfilPage() {
     { label: 'Activités',   value: '248' },
     { label: 'km Total',    value: '3 412' },
     { label: 'Heures',      value: '187' },
-    { label: 'Abonnés',     value: '1.2k' },
-    { label: 'Abonnements', value: '340' },
+    { label: 'Abonnés',     value: String(counts.followers) },
+    { label: 'Abonnements', value: String(counts.following) },
   ];
 
   const challenges = [
@@ -67,7 +92,7 @@ export default function ProfilPage() {
 
             {/* ── HEADER CARD ── */}
             <div className="header-card">
-              <ProfileHeader user={mockUser} isOwnProfile={true} />
+              <ProfileHeader user={user} isOwnProfile={true} />
             </div>
 
             {/* ── STATS BAR ── */}

@@ -21,8 +21,15 @@ export default function Home() {
   const [newComment, setNewComment] = useState('');
   // demoMode = true tant que le backend n'a pas répondu (données de démo affichées)
   const [demoMode, setDemoMode] = useState(true);
-  const { status } = useSession();
-  const userConnected = status === 'authenticated';
+  const [followingMap, setFollowingMap] = useState({});
+  const [draft, setDraft] = useState({ title: '', content: '' });
+  const [posting, setPosting] = useState(false);
+
+  // Auth via NextAuth : la session vit dans un cookie httpOnly.
+  const { data: session, status } = useSession();
+  const isLoggedIn = status === 'authenticated';
+  const currentUserId = session?.user?.id ?? null;
+
   // Données des posts
   const [posts, setPosts] = useState([
     {
@@ -185,7 +192,7 @@ export default function Home() {
     }
 
     // Synchronisation backend (uniquement sur des posts réels + utilisateur connecté).
-    if (!demoMode && userConnected) {
+    if (!demoMode && isLoggedIn) {
       const action = willLike ? api.likePost(postId) : api.unlikePost(postId);
       action.catch(() => {
         /* Échec silencieux : on garde l'affichage optimiste pour ne pas gêner l'UX. */
@@ -239,11 +246,56 @@ export default function Home() {
       setNewComment('');
 
       // Persiste le commentaire côté backend si connecté + post réel.
-      if (!demoMode && userConnected) {
+      if (!demoMode && isLoggedIn) {
         api.addComment(postId, newCommentObj.text).catch(() => {
           /* Échec silencieux : le commentaire reste affiché localement. */
         });
       }
+    }
+  };
+
+  // Créer une publication (#1). create() ne renvoyant pas author/_count, on
+  // recharge le fil après coup pour un affichage propre.
+  const handleCreatePost = async () => {
+    if (!isLoggedIn) { alert('Connecte-toi pour publier.'); return; }
+    if (!draft.title.trim() && !draft.content.trim()) return;
+    setPosting(true);
+    try {
+      await api.createPost({
+        title: draft.title.trim() || undefined,
+        content: draft.content.trim() || undefined,
+      });
+      const data = await api.getFeed();
+      setPosts(mapPosts(data));
+      setDemoMode(false);
+      setDraft({ title: '', content: '' });
+    } catch (e) {
+      alert(e.message || 'Échec de la publication.');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  // Supprimer une de ses publications (#2). Le backend renvoie 404 si ce n'est pas la tienne.
+  const handleDelete = async (postId) => {
+    try {
+      await api.deletePost(postId);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      if (selectedPost && selectedPost.id === postId) setSelectedPost(null);
+    } catch (e) {
+      alert(e.message || 'Suppression impossible.');
+    }
+  };
+
+  // Suivre / ne plus suivre l'auteur d'un post (#5). Affichage optimiste + revert si erreur.
+  const handleToggleFollow = async (authorId, shouldFollow) => {
+    setFollowingMap((m) => ({ ...m, [authorId]: shouldFollow }));
+    try {
+      if (shouldFollow) await api.follow(authorId);
+      else await api.unfollow(authorId);
+    } catch (e) {
+      setFollowingMap((m) => ({ ...m, [authorId]: !shouldFollow }));
+      alert(e.message || 'Action impossible.');
     }
   };
 
@@ -265,12 +317,39 @@ export default function Home() {
             {demoMode && (
               <div className="mb-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
                 Mode démonstration : le backend n'est pas connecté. Les publications
-                affichées sont des données d'exemple. Démarrez l'API (port 3001) pour
+                affichées sont des données d'exemple. Démarrez l'API pour
                 voir le vrai fil d'actualité.
               </div>
             )}
             <FeaturedAthletes athletes={featuredAthletes} />
             <DailyChallenge />
+
+            {!demoMode && isLoggedIn && (
+              <div className="bg-white border-2 border-gray-100 rounded-2xl p-3 lg:p-4 mb-4 lg:mb-6 shadow-lg">
+                <input
+                  className="w-full mb-2 outline-none font-bold text-[#0047AB] placeholder-gray-400"
+                  placeholder="Titre (optionnel)"
+                  value={draft.title}
+                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                />
+                <textarea
+                  className="w-full outline-none resize-none text-gray-800 placeholder-gray-400"
+                  rows={2}
+                  placeholder="Quoi de neuf ? Partagez votre perf 💪"
+                  value={draft.content}
+                  onChange={(e) => setDraft({ ...draft, content: e.target.value })}
+                />
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleCreatePost}
+                    disabled={posting}
+                    className="bg-[#0047AB] hover:bg-[#003a8c] text-white rounded-full px-5 py-2 font-bold disabled:opacity-50 transition-colors"
+                  >
+                    {posting ? 'Publication…' : 'Publier'}
+                  </button>
+                </div>
+              </div>
+            )}
             
             {posts.map(post => (
               <PostCard
@@ -279,6 +358,10 @@ export default function Home() {
                 onLike={toggleLike}
                 onSave={toggleSave}
                 onOpenModal={setSelectedPost}
+                currentUserId={currentUserId}
+                isFollowing={!!followingMap[post.authorId]}
+                onDelete={!demoMode && isLoggedIn ? handleDelete : undefined}
+                onToggleFollow={!demoMode && isLoggedIn ? handleToggleFollow : undefined}
               />
             ))}
           </div>

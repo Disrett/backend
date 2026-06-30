@@ -4,20 +4,19 @@ import { Bell, Send, Plus, Menu, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { api } from '../lib/api';
-import { clearAuth, isAuthenticated } from '../lib/auth';
+import { clearAuth } from '../lib/auth';
 
 export default function Header({ setShowMobileMenu }) {
   const pathname = usePathname();
   const router = useRouter();
 
   const handleLogout = async () => {
-    // Invalide le refresh token côté serveur (best-effort), puis purge le local.
-    if (isAuthenticated()) {
-      try {
-        await api.logout();
-      } catch {
-        /* on déconnecte quand même localement */
-      }
+    // Invalide le refresh token côté serveur (best-effort) ; si non connecté,
+    // l'appel échoue silencieusement. clearAuth() déclenche signOut() de NextAuth.
+    try {
+      await api.logout();
+    } catch {
+      /* on déconnecte quand même via NextAuth */
     }
     clearAuth();
     router.push('/login');
