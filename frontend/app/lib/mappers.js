@@ -47,6 +47,7 @@ export function mapPost(p) {
   return {
     id: p.id,
     authorId: p.author?.id || null,
+    authorUsername: p.author?.username || null,
     author: authorName,
     authorImage: p.author?.avatarUrl || fallbackAvatar(p.author?.username || authorName),
     content: text || '',

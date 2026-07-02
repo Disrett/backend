@@ -10,10 +10,15 @@ export default function PostCard({
   onDelete,
   onToggleFollow,
   currentUserId,
+  currentUsername,
   isFollowing,
 }) {
-  // Boutons contextuels (n'apparaissent qu'avec un backend réel + utilisateur connecté).
-  const isOwnPost = Boolean(currentUserId && post.authorId && post.authorId === currentUserId);
+  // Propriété du post : par id si le fil l'expose, sinon par username (toujours
+  // présent dans le fil, même si l'image backend n'a pas encore l'id de l'auteur).
+  const isOwnPost = Boolean(
+    (currentUserId && post.authorId && post.authorId === currentUserId) ||
+      (currentUsername && post.authorUsername && post.authorUsername === currentUsername),
+  );
   const canFollow = Boolean(
     onToggleFollow && post.authorId && currentUserId && post.authorId !== currentUserId,
   );

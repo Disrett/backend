@@ -29,6 +29,7 @@ export default function Home() {
   const { data: session, status } = useSession();
   const isLoggedIn = status === 'authenticated';
   const currentUserId = session?.user?.id ?? null;
+  const currentUsername = session?.user?.username ?? null;
 
   // Données des posts
   const [posts, setPosts] = useState([
@@ -359,6 +360,7 @@ export default function Home() {
                 onSave={toggleSave}
                 onOpenModal={setSelectedPost}
                 currentUserId={currentUserId}
+                currentUsername={currentUsername}
                 isFollowing={!!followingMap[post.authorId]}
                 onDelete={!demoMode && isLoggedIn ? handleDelete : undefined}
                 onToggleFollow={!demoMode && isLoggedIn ? handleToggleFollow : undefined}
