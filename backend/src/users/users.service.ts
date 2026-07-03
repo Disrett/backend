@@ -25,15 +25,20 @@ export class UsersService {
     return user;
   }
 
-  /** Suivre un utilisateur. */
+  /** Suivre un utilisateur (idempotent : pas de doublon, pas d'auto-suivi). */
   async follow(followerId: string, followingId: string) {
-    return this.prisma.follow.create({ data: { followerId, followingId } });
+    if (followerId === followingId) return { success: true };
+    return this.prisma.follow.upsert({
+      where: { followerId_followingId: { followerId, followingId } },
+      create: { followerId, followingId },
+      update: {},
+    });
   }
 
-  /** Ne plus suivre. */
+  /** Ne plus suivre (idempotent : ok même si la relation n'existe pas). */
   async unfollow(followerId: string, followingId: string) {
-    return this.prisma.follow.delete({
-      where: { followerId_followingId: { followerId, followingId } },
-    });
+    return this.prisma.follow
+      .delete({ where: { followerId_followingId: { followerId, followingId } } })
+      .catch(() => ({ success: true }));
   }
 }

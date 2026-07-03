@@ -14,7 +14,7 @@ export class PostsService {
       ...(cursor && { skip: 1, cursor: { id: cursor } }),
       orderBy: { createdAt: 'desc' },
       include: {
-        author: { select: { username: true, name: true, avatarUrl: true } },
+        author: { select: { id: true, username: true, name: true, avatarUrl: true } },
         _count: { select: { likes: true, comments: true } },
       },
     });

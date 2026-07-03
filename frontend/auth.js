@@ -107,6 +107,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       session.user.username = token.username;
       session.user.id = token.sub;
+      // Exposé pour les appels API côté client (api.js lit session.accessToken).
+      // Compromis : le token redevient lisible en JS. Pour une sécurité maximale,
+      // préférer des Route Handlers serveur (voir AUTH_MIGRATION.md).
+      session.accessToken = token.accessToken;
       // On expose un flag d'erreur si le refresh a échoué
       if (token.error) session.error = token.error;
       return session;

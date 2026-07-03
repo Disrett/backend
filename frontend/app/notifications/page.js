@@ -7,7 +7,7 @@ import Header from '../components/header';
 import { Heart, MessageCircle, UserPlus, Trophy, Star, Zap, Bell, Check, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { mapNotifications } from '../lib/mappers';
-import { isAuthenticated } from '../lib/auth';
+import { useSession } from 'next-auth/react';
 
 const initialNotifications = [
   {
@@ -226,10 +226,14 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
   const [demoMode, setDemoMode] = useState(true);
 
+  // Auth via NextAuth.
+  const { data: session, status } = useSession();
+  const isLoggedIn = status === 'authenticated';
+
   // Charge les vraies notifications si l'utilisateur est connecté.
   // En cas d'échec, on conserve les notifications de démonstration.
   useEffect(() => {
-    if (!isAuthenticated()) return; // pas connecté → démo
+    if (!isLoggedIn) return; // pas connecté → démo
     let cancelled = false;
     (async () => {
       try {
@@ -244,13 +248,13 @@ export default function NotificationsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isLoggedIn]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const markAllRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    if (!demoMode && isAuthenticated()) {
+    if (!demoMode && isLoggedIn) {
       api.markAllNotificationsRead().catch(() => {});
     }
   };
@@ -264,7 +268,7 @@ export default function NotificationsPage() {
 
   const deleteNotif = (id) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
-    if (!demoMode && isAuthenticated()) {
+    if (!demoMode && isLoggedIn) {
       api.deleteNotification(id).catch(() => {});
     }
   };
