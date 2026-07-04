@@ -10,12 +10,22 @@ export default function PostCard({
   onDelete,
   onToggleFollow,
   currentUserId,
+  currentUsername,
   isFollowing,
 }) {
-  // Boutons contextuels (n'apparaissent qu'avec un backend réel + utilisateur connecté).
-  const isOwnPost = Boolean(currentUserId && post.authorId && post.authorId === currentUserId);
+  // Propriété du post : par id si le fil l'expose, sinon par username (toujours
+  // présent dans le fil, même si l'image backend n'a pas encore l'id de l'auteur).
+  const isOwnPost = Boolean(
+    (currentUserId && post.authorId && post.authorId === currentUserId) ||
+      (currentUsername && post.authorUsername && post.authorUsername === currentUsername),
+  );
+  // « Suivre » se base sur le username (toujours présent dans le fil). L'id de la
+  // cible est résolu au moment du clic, côté page, même si le fil ne fournit pas l'id.
   const canFollow = Boolean(
-    onToggleFollow && post.authorId && currentUserId && post.authorId !== currentUserId,
+    onToggleFollow &&
+      post.authorUsername &&
+      currentUsername &&
+      post.authorUsername !== currentUsername,
   );
   const canDelete = Boolean(onDelete && isOwnPost);
 
@@ -46,7 +56,7 @@ export default function PostCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onToggleFollow(post.authorId, !isFollowing);
+              onToggleFollow(post, !isFollowing);
             }}
             className={`ml-3 inline-flex items-center gap-1 text-xs lg:text-sm font-bold px-3 py-1.5 rounded-full transition-colors ${
               isFollowing

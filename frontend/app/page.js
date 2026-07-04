@@ -29,6 +29,7 @@ export default function Home() {
   const { data: session, status } = useSession();
   const isLoggedIn = status === 'authenticated';
   const currentUserId = session?.user?.id ?? null;
+  const currentUsername = session?.user?.username ?? null;
 
   // Données des posts
   const [posts, setPosts] = useState([
@@ -288,13 +289,23 @@ export default function Home() {
   };
 
   // Suivre / ne plus suivre l'auteur d'un post (#5). Affichage optimiste + revert si erreur.
-  const handleToggleFollow = async (authorId, shouldFollow) => {
-    setFollowingMap((m) => ({ ...m, [authorId]: shouldFollow }));
+  const handleToggleFollow = async (post, shouldFollow) => {
+    const key = post.authorUsername || post.authorId;
+    if (!key) return;
+    setFollowingMap((m) => ({ ...m, [key]: shouldFollow }));
     try {
-      if (shouldFollow) await api.follow(authorId);
-      else await api.unfollow(authorId);
+      // L'API follow attend un id. Si le fil ne le fournit pas (image backend non
+      // reconstruite), on le résout à partir du username via GET /users/:username.
+      let targetId = post.authorId;
+      if (!targetId && post.authorUsername) {
+        const profile = await api.getProfile(post.authorUsername);
+        targetId = profile?.id;
+      }
+      if (!targetId) throw new Error('Utilisateur introuvable.');
+      if (shouldFollow) await api.follow(targetId);
+      else await api.unfollow(targetId);
     } catch (e) {
-      setFollowingMap((m) => ({ ...m, [authorId]: !shouldFollow }));
+      setFollowingMap((m) => ({ ...m, [key]: !shouldFollow }));
       alert(e.message || 'Action impossible.');
     }
   };
@@ -359,7 +370,8 @@ export default function Home() {
                 onSave={toggleSave}
                 onOpenModal={setSelectedPost}
                 currentUserId={currentUserId}
-                isFollowing={!!followingMap[post.authorId]}
+                currentUsername={currentUsername}
+                isFollowing={!!followingMap[post.authorUsername]}
                 onDelete={!demoMode && isLoggedIn ? handleDelete : undefined}
                 onToggleFollow={!demoMode && isLoggedIn ? handleToggleFollow : undefined}
               />
